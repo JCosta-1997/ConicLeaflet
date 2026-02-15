@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leaflet Map - Europe Albers Projection</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <style>
+        body { margin: 0; padding: 0; }
+        #map { height: 100vh; width: 100%; background: #a2d5f2; /* A nice ocean blue */ }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Proj4js: Required for coordinate transformation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.js"></script>
+    <!-- Proj4Leaflet: Bridges Leaflet and Proj4 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.2/proj4leaflet.js"></script>
+
+    <script>
+        // 1. Define the Proj4 string for the Conic Projection.
+        // ESRI:102013 (Europe Albers Equal Area Conic)
+        const crsDef = '+proj=aea +lat_1=43 +lat_2=62 +lat_0=30 +lon_0=10 +x_0=0 +y_0=0 +ellps=intl +units=m +no_defs';
+
+        // 2. Create the CRS (Coordinate Reference System) object.
+        const crs = new L.Proj.CRS('ESRI:102013', crsDef, {
+            // Resolutions determine the zoom levels. Since we are using meters, these are meters per pixel.
+            resolutions: [8192, 4096, 2048, 1024, 512, 256, 128],
+            // The origin of the grid (optional for vectors, but good practice)
+            origin: [0, 0]
+        });
+
+        // 3. Initialize the map with the custom CRS.
+        const map = L.map('map', {
+            crs: crs,
+            center: [50, 10], // Approximate center of Europe
+            zoom: 2,
+            minZoom: 0,
+            maxZoom: 6
+        });
+
+        // Create a dedicated pane for the graticule to ensure it's drawn on top of other layers.
+        map.createPane('graticulePane');
+        map.getPane('graticulePane').style.zIndex = 450; // Above overlays (400), below markers (600)
+        map.getPane('graticulePane').style.pointerEvents = 'none'; // Graticule should not be interactive
+
+        // Helper function to generate a GeoJSON graticule layer.
+        // This is a robust way to create graticules on projected maps.
+        function createGraticuleLayer(interval = 10) {
+            const features = [];
+
+            // Create longitude lines (meridians)
+            for (let lon = -180; lon <= 180; lon += interval) {
+                const coords = [];
+                // Use small steps for smooth curves after projection
+                for (let lat = -90; lat <= 90; lat += 1) {
+                    coords.push([lon, lat]);
+                }
+                features.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: coords },
+                    properties: {}
+                });
+            }
+
+            // Create latitude lines (parallels)
+            for (let lat = -90; lat <= 90; lat += interval) {
+                const coords = [];
+                // Use small steps for smooth curves after projection
+                for (let lon = -180; lon <= 180; lon += 1) {
+                    coords.push([lon, lat]);
+                }
+                features.push({
+                    type: 'Feature',
+                    geometry: { type: 'LineString', coordinates: coords },
+                    properties: {}
+                });
+            }
+
+            return L.geoJSON({ type: 'FeatureCollection', features: features }, {
+                style: { color: '#333', weight: 0.5, opacity: 0.8, interactive: false },
+                // Assign the graticule to its dedicated pane to control draw order.
+                pane: 'graticulePane'
+            });
+        }
+
+        // The L.graticule plugin is incompatible with this custom projection.
+        // We create it as a GeoJSON layer instead, which is projection-aware.
+        createGraticuleLayer(10).addTo(map);
+        
+        // 4. Load GeoJSON data.
+        // Standard tile layers (OSM/Google) will NOT work here because they are in Web Mercator.
+        // We use a GeoJSON layer to visualize the map.
+        fetch('https://raw.githubusercontent.com/leakyMirror/map-of-europe/master/GeoJSON/europe.geojson')
+            .then(response => response.json())
+            .then(data => {
+                L.geoJSON(data, {
+                    style: {
+                        color: "#444",
+                        weight: 1,
+                        fillColor: "#cccccc", // Changed country fill to grey
+                        // Making countries semi-transparent lets the ocean background show through.
+                        fillOpacity: 0.7
+                    }
+                }).addTo(map);
+            });
+    </script>
+</body>
+</html>
